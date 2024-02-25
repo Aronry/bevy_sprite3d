@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use bevy::asset::{load_internal_asset, load_internal_binary_asset};
 
 
-pub const PSX_FRAG_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(310591614790536);
-pub const PSX_VERT_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(210541614790536);
-pub const PSX_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(510291613494514);
+pub const CUSTOM_FRAG_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(310591614790536);
+pub const CUSTOM_VERT_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(210541614790536);
+pub const CUSTOM_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(510291613494514);
 
 pub struct Sprite3dPlugin;
 impl Plugin for Sprite3dPlugin {
@@ -19,14 +19,14 @@ impl Plugin for Sprite3dPlugin {
         
         load_internal_asset!(
             app,
-            PSX_FRAG_SHADER_HANDLE,
+            CUSTOM_FRAG_SHADER_HANDLE,
             "extended_material_vs.wgsl",
             Shader::from_wgsl
         );
 
         load_internal_asset!(
             app,
-            PSX_VERT_SHADER_HANDLE,
+            CUSTOM_VERT_SHADER_HANDLE,
             "extended_material_fs.wgsl",
             Shader::from_wgsl
         );
@@ -143,11 +143,11 @@ fn quad(w: f32, h: f32, pivot: Option<Vec2>, double_sided: bool) -> Mesh {
 
 impl Material for CustomMaterial{
     fn fragment_shader() -> ShaderRef {
-        ShaderRef::Handle(PSX_FRAG_SHADER_HANDLE)
+        ShaderRef::Handle(CUSTOM_FRAG_SHADER_HANDLE)
     }
 
     fn vertex_shader() -> ShaderRef {
-        ShaderRef::Handle(PSX_VERT_SHADER_HANDLE)
+        ShaderRef::Handle(CUSTOM_VERT_SHADER_HANDLE)
     }
 
     fn alpha_mode(&self) -> AlphaMode {
