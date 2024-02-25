@@ -2,12 +2,34 @@ use bevy::prelude::*;
 use bevy::render::{ mesh::*, render_resource::* };
 use std::hash::Hash;
 use std::collections::HashMap;
+use bevy::asset::{load_internal_asset, load_internal_binary_asset};
+
+
+pub const PSX_FRAG_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(310591614790536);
+pub const PSX_VERT_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(210541614790536);
+pub const PSX_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(510291613494514);
 
 pub struct Sprite3dPlugin;
 impl Plugin for Sprite3dPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(MaterialPlugin::<CustomMaterial>::default());
         app.init_resource::<Sprite3dRes>();
         app.add_systems(PostUpdate, sprite3d_system);
+
+        
+        load_internal_asset!(
+            app,
+            PSX_FRAG_SHADER_HANDLE,
+            "extended_material_vs.wgsl",
+            Shader::from_wgsl
+        );
+
+        load_internal_asset!(
+            app,
+            PSX_VERT_SHADER_HANDLE,
+            "extended_material_fs.wgsl",
+            Shader::from_wgsl
+        );
     }
 }
 
@@ -22,7 +44,7 @@ use bevy::ecs::system::SystemParam;
 #[derive(SystemParam)]
 pub struct Sprite3dParams<'w, 's> {
     pub meshes    : ResMut<'w, Assets<Mesh>>,
-    pub materials : ResMut<'w, Assets<StandardMaterial>>,
+    pub materials : ResMut<'w, Assets<CustomMaterial>>,
     pub images    : ResMut<'w, Assets<Image>>,
     pub atlases   : ResMut<'w, Assets<TextureAtlas>>,
     pub sr        : ResMut<'w, Sprite3dRes>,
@@ -33,31 +55,11 @@ pub struct Sprite3dParams<'w, 's> {
 #[derive(Eq, Hash, PartialEq)]
 pub struct MatKey {
     image: Handle<Image>,
-    alpha_mode: HashableAlphaMode,
     unlit: bool,
     emissive: [u8; 4],
 }
 
 const DEFAULT_ALPHA_MODE: AlphaMode = AlphaMode::Mask(0.5);
-
-#[derive(Eq, PartialEq)]
-struct HashableAlphaMode(AlphaMode);
-
-impl Hash for HashableAlphaMode {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self.0 {
-            AlphaMode::Opaque => 0.hash(state),
-            AlphaMode::Mask(f) => {
-                1.hash(state);
-                f.to_bits().hash(state);
-            },
-            AlphaMode::Blend => 2.hash(state),
-            AlphaMode::Premultiplied => 3.hash(state),
-            AlphaMode::Add => 4.hash(state),
-            AlphaMode::Multiply => 5.hash(state),
-        }
-    }
-}
 
 
 fn reduce_colour(c: Color) -> [u8; 4] { [
@@ -71,7 +73,7 @@ fn reduce_colour(c: Color) -> [u8; 4] { [
 #[derive(Resource)]
 pub struct Sprite3dRes {
     pub mesh_cache: HashMap<[u32; 9], Handle<Mesh>>,
-    pub material_cache: HashMap<MatKey, Handle<StandardMaterial>>,
+    pub material_cache: HashMap<MatKey, Handle<CustomMaterial>>,
 }
 
 impl Default for Sprite3dRes {
@@ -139,20 +141,37 @@ fn quad(w: f32, h: f32, pivot: Option<Vec2>, double_sided: bool) -> Mesh {
 }
 
 
+impl Material for CustomMaterial{
+    fn fragment_shader() -> ShaderRef {
+        ShaderRef::Handle(PSX_FRAG_SHADER_HANDLE)
+    }
 
+    fn vertex_shader() -> ShaderRef {
+        ShaderRef::Handle(PSX_VERT_SHADER_HANDLE)
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        self.alpha_mode
+    }
+}
+
+// This is the struct that will be passed to your shader
+#[derive(AsBindGroup, Debug, Clone, Asset, TypePath)]
+pub struct CustomMaterial {
+    #[uniform(0)]
+    pub color: Color,
+    #[texture(1)]
+    #[sampler(2)]
+    pub color_texture: Option<Handle<Image>>,
+    pub alpha_mode: AlphaMode,
+}
 
 // generate a StandardMaterial useful for rendering a sprite
-fn material(image: Handle<Image>, alpha_mode: AlphaMode, unlit: bool, emissive: Color) -> StandardMaterial {
-    StandardMaterial {
-        base_color_texture: Some(image),
-        cull_mode: Some(Face::Back),
-        alpha_mode,
-        unlit,
-        perceptual_roughness: 0.5,
-        reflectance: 0.15,
-        emissive,
-
-        ..Default::default()
+fn material(image: Handle<Image>, unlit: bool, emissive: Color) -> CustomMaterial {
+    return CustomMaterial {
+        color: emissive,
+        color_texture: Some(image),
+        alpha_mode: AlphaMode::Blend,
     }
 }
 
@@ -227,7 +246,7 @@ pub struct Sprite3dComponent { }
 #[derive(Bundle)]
 pub struct Sprite3dBundle {
     pub params: Sprite3dComponent,
-    pub pbr: PbrBundle,
+    pub pbr: MaterialMeshBundle<CustomMaterial>,
 }
 
 impl Sprite3d {
@@ -243,7 +262,7 @@ impl Sprite3d {
 
         return Sprite3dBundle {
             params: Sprite3dComponent { },
-            pbr: PbrBundle {
+            pbr: MaterialMeshBundle {
                 mesh: {
                     let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
 
@@ -271,14 +290,13 @@ impl Sprite3d {
                 material: {
                     let mat_key = MatKey {
                         image: self.image.clone(),
-                        alpha_mode: HashableAlphaMode(self.alpha_mode),
                         unlit: self.unlit,
                         emissive: reduce_colour(self.emissive),
                     };
 
                     if let Some(material) = params.sr.material_cache.get(&mat_key) { material.clone() }
                     else {
-                        let material = params.materials.add(material(self.image.clone(), self.alpha_mode, self.unlit, self.emissive));
+                        let material = params.materials.add(material(self.image.clone(),  self.unlit, self.emissive));
                         params.sr.material_cache.insert(mat_key, material.clone());
                         material
                     }
@@ -373,7 +391,7 @@ pub struct AtlasSprite3dComponent {
 #[derive(Bundle)]
 pub struct AtlasSprite3dBundle {
     pub params: AtlasSprite3dComponent,
-    pub pbr: PbrBundle,
+    pub pbr: MaterialMeshBundle<CustomMaterial>,
 }
 
 
@@ -449,18 +467,17 @@ impl AtlasSprite3d {
         }
 
         return AtlasSprite3dBundle {
-            pbr: PbrBundle {
+            pbr: MaterialMeshBundle {
                 mesh: params.sr.mesh_cache.get(&mesh_keys[self.index]).unwrap().clone(),
                 material: {
                     let mat_key = MatKey {
                         image: atlas.texture.clone(),
-                        alpha_mode: HashableAlphaMode(self.alpha_mode),
                         unlit: self.unlit,
                         emissive: reduce_colour(self.emissive),
                     };
                     if let Some(material) = params.sr.material_cache.get(&mat_key) { material.clone() }
                     else {
-                        let material = params.materials.add(material(atlas.texture.clone(), self.alpha_mode, self.unlit, self.emissive));
+                        let material = params.materials.add(material(atlas.texture.clone(), self.unlit, self.emissive));
                         params.sr.material_cache.insert(mat_key, material.clone());
                         material
                     }
