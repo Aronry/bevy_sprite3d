@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use bevy::asset::{load_internal_asset, load_internal_binary_asset};
 
 
-pub const CUSTOM_FRAG_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(310591614790536);
-pub const CUSTOM_VERT_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(210541614790536);
-pub const CUSTOM_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(510291613494514);
+pub const CUSTOM_FRAG_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(910591614790536);
+pub const CUSTOM_VERT_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(910541614790536);
+pub const CUSTOM_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(910291613494514);
 
 pub struct Sprite3dPlugin;
 impl Plugin for Sprite3dPlugin {
