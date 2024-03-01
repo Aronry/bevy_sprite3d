@@ -51,6 +51,6 @@ var out: FragmentOutput;
 
     // we can optionally modify the final result here
     // out.color = out.color + vec4<f32>(my_extended_material.add_color.xyz, 0.);
-    out.color = textureSample(base_color_texture, base_color_sampler, in.uv);
+    out.color = textureSample(base_color_texture, base_color_sampler, in.uv) * material.color;
     return out;
 }
