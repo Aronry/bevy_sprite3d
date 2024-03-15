@@ -523,7 +523,6 @@ fn crazy_color_system(
                     material.color = Color::WHITE;
                 } else {
                     material.color = Color::PURPLE;
-                    println!("h");
                 }
             }
         }

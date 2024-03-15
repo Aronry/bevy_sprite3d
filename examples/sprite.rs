@@ -60,7 +60,7 @@ fn setup(
 
             // transform: Transform::from_xyz(0., 0., 0.),
             // pivot: Some(Vec2::new(0.5, 0.5)),
-
+            crazy_colors: true,
             ..default()
     }.bundle(&mut sprite_params));
 
