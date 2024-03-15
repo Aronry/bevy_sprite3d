@@ -15,7 +15,7 @@ impl Plugin for Sprite3dPlugin {
         app.add_plugins(MaterialPlugin::<CustomMaterial>::default());
         app.init_resource::<Sprite3dRes>();
         app.add_systems(PostUpdate, sprite3d_system);
-
+        app.add_systems(Update, crazy_color_system);
         
         load_internal_asset!(
             app,
@@ -56,6 +56,7 @@ pub struct Sprite3dParams<'w, 's> {
 pub struct MatKey {
     image: Handle<Image>,
     unlit: bool,
+    crazy: bool,
     emissive: [u8; 4],
 }
 
@@ -221,6 +222,10 @@ pub struct Sprite3d {
     /// An emissive colour, if the sprite should emit light.
     /// `Color::Black` (default) does nothing.
     pub emissive: Color,
+
+        /// An emissive colour, if the sprite should emit light.
+    /// `Color::Black` (default) does nothing.
+    pub crazy_colors: bool,
 }
 
 impl Default for Sprite3d {
@@ -234,6 +239,7 @@ impl Default for Sprite3d {
             unlit: false,
             double_sided: true,
             emissive: Color::BLACK,
+            crazy_colors: false,
         }
     }
 }
@@ -291,6 +297,7 @@ impl Sprite3d {
                     let mat_key = MatKey {
                         image: self.image.clone(),
                         unlit: self.unlit,
+                        crazy: self.crazy_colors,
                         emissive: reduce_colour(self.emissive),
                     };
 
@@ -473,10 +480,12 @@ impl AtlasSprite3d {
                     let mat_key = MatKey {
                         image: atlas.texture.clone(),
                         unlit: self.unlit,
+                        crazy: false,
                         emissive: reduce_colour(self.emissive),
                     };
                     if let Some(material) = params.sr.material_cache.get(&mat_key) { material.clone() }
                     else {
+
                         let material = params.materials.add(material(atlas.texture.clone(), self.unlit, self.emissive));
                         params.sr.material_cache.insert(mat_key, material.clone());
                         material
@@ -493,3 +502,30 @@ impl AtlasSprite3d {
         }
     }
 }
+
+
+
+#[derive(Component)]
+pub struct CrazyColors {
+    material: Handle<CustomMaterial>,
+}
+
+fn crazy_color_system(
+    time: Res<Time>,
+    sprite_resource: ResMut<Sprite3dRes>,
+    mut materials: ResMut<Assets<CustomMaterial>>,
+) {
+    let blit_index = 0;
+    for (mat_key, material_handle) in &sprite_resource.material_cache {
+        if mat_key.crazy {
+            if let Some(material) = materials.get_mut(material_handle) {
+                if (time.elapsed_seconds() * 10.).fract() < 0.5 {
+                    material.color = Color::WHITE;
+                } else {
+                    material.color = Color::PURPLE;
+                }
+            }
+        }
+    }
+}
+
