@@ -503,13 +503,7 @@ impl AtlasSprite3d {
     }
 }
 
-
-
-#[derive(Component)]
-pub struct CrazyColors {
-    material: Handle<CustomMaterial>,
-}
-
+/* 
 fn crazy_color_system(
     time: Res<Time>,
     sprite_resource: ResMut<Sprite3dRes>,
@@ -529,3 +523,4 @@ fn crazy_color_system(
     }
 }
 
+ */
