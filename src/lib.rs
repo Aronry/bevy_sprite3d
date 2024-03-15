@@ -519,10 +519,11 @@ fn crazy_color_system(
     for (mat_key, material_handle) in &sprite_resource.material_cache {
         if mat_key.crazy {
             if let Some(material) = materials.get_mut(material_handle) {
-                if (time.elapsed_seconds() * 10.).fract() < 0.5 {
+                if (time.elapsed_seconds() * 5.).fract() < 0.5 {
                     material.color = Color::WHITE;
                 } else {
                     material.color = Color::PURPLE;
+                    println!("h");
                 }
             }
         }
