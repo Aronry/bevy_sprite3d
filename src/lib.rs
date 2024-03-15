@@ -15,7 +15,7 @@ impl Plugin for Sprite3dPlugin {
         app.add_plugins(MaterialPlugin::<CustomMaterial>::default());
         app.init_resource::<Sprite3dRes>();
         app.add_systems(PostUpdate, sprite3d_system);
-        
+
         load_internal_asset!(
             app,
             CUSTOM_FRAG_SHADER_HANDLE,
@@ -55,7 +55,7 @@ pub struct Sprite3dParams<'w, 's> {
 pub struct MatKey {
     image: Handle<Image>,
     unlit: bool,
-    crazy: bool,
+    pub crazy: bool,
     emissive: [u8; 4],
 }
 
