@@ -15,7 +15,6 @@ impl Plugin for Sprite3dPlugin {
         app.add_plugins(MaterialPlugin::<CustomMaterial>::default());
         app.init_resource::<Sprite3dRes>();
         app.add_systems(PostUpdate, sprite3d_system);
-        app.add_systems(Update, crazy_color_system);
         
         load_internal_asset!(
             app,
