@@ -51,6 +51,13 @@ var out: FragmentOutput;
 
     // we can optionally modify the final result here
     // out.color = out.color + vec4<f32>(my_extended_material.add_color.xyz, 0.);
-    out.color = textureSample(base_color_texture, base_color_sampler, in.uv) * material.color;
+    let b = textureSample(base_color_texture, base_color_sampler, in.uv);
+    let f = material.color;
+
+    let cr = select(1.0 - 2.0 * (1.0 - b.r) * (1.0 - f.r), 2.0 * b.r * f.r, b.r < 0.5);
+    let cg = select(1.0 - 2.0 * (1.0 - b.g) * (1.0 - f.g), 2.0 * b.g * f.g, b.g < 0.5);
+    let cb = select(1.0 - 2.0 * (1.0 - b.b) * (1.0 - f.b), 2.0 * b.b * f.b, b.b < 0.5);
+
+    out.color = vec4(cr, cg, cb, b.a);
     return out;
 }
