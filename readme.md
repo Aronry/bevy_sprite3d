@@ -92,20 +92,18 @@ fn setup(
 
 One small complication: your image assets should be loaded *prior* to spawning,
 as `bevy_sprite3d` uses some properties of the image (such as size and aspect
-ratio) in constructing the 3d mesh.
-
-To that end, I'd recommend using
-[`bevy_asset_loader`](https://github.com/NiklasEi/bevy_asset_loader) for
-simplicity. Examples are provided both with and without it.
+ratio) in constructing the 3d mesh. Examples show how to do this with Bevy's
+`States`.
 
 ## Versioning
 
 | `bevy_sprite3d` version | `bevy` version |
 |-------------------------|----------------|
+| 2.8                     | 0.13           |
 | 2.7                     | 0.12           |
 | 2.5 - 2.6               | 0.11           |
 | 2.4                     | 0.10           |
-| 2.1 - 2.4               | 0.9            |
+| 2.1 - 2.3               | 0.9            |
 | 1.1 - 2.0               | 0.8            |
 | 1.0                     | 0.7            |
 
