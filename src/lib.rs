@@ -43,7 +43,7 @@ use bevy::ecs::system::SystemParam;
 #[derive(SystemParam)]
 pub struct Sprite3dParams<'w, 's> {
     pub meshes        : ResMut<'w, Assets<Mesh>>,
-    pub materials     : ResMut<'w, Assets<StandardMaterial>>,
+    pub materials     : ResMut<'w, Assets<CustomMaterial>>,
     pub images        : ResMut<'w, Assets<Image>>,
     pub atlas_layouts : ResMut<'w, Assets<TextureAtlasLayout>>,
     pub sr            : ResMut<'w, Sprite3dRes>,
@@ -267,14 +267,14 @@ pub struct TextureAtlas3dData {
 #[derive(Bundle)]
 pub struct Sprite3dBundle {
     pub params: Sprite3dComponent,
-    pub pbr: PbrBundle,
+    pub pbr: MaterialMeshBundle<CustomMaterial>,
 }
 
 #[derive(Bundle)]
 pub struct AtlasSprite3dBundle {
     pub params: Sprite3dComponent,
     pub data: TextureAtlas3dData,
-    pub pbr: PbrBundle,
+    pub pbr: MaterialMeshBundle<CustomMaterial>,
     pub atlas: TextureAtlas,
 }
 
@@ -289,7 +289,7 @@ impl Sprite3d {
 
         return Sprite3dBundle {
             params: Sprite3dComponent {},
-            pbr: PbrBundle {
+            pbr: MaterialMeshBundle {
                 mesh: {
                     let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
 
@@ -410,19 +410,18 @@ impl Sprite3d {
         }
 
         return AtlasSprite3dBundle {
-            pbr: PbrBundle {
+            pbr: MaterialMeshBundle {
                 mesh: params.sr.mesh_cache.get(&mesh_keys[atlas.index]).unwrap().clone(),
                 material: {
                     let mat_key = MatKey {
                         image: self.image.clone(),
-                        alpha_mode: HashableAlphaMode(self.alpha_mode),
                         unlit: self.unlit,
                         crazy: false,
                         emissive: reduce_colour(self.emissive),
                     };
                     if let Some(material) = params.sr.material_cache.get(&mat_key) { material.clone() }
                     else {
-                        let material = params.materials.add(material(self.image.clone(), self.alpha_mode, self.unlit, self.emissive));
+                        let material = params.materials.add(material(self.image.clone(), self.unlit, self.emissive));
                         params.sr.material_cache.insert(mat_key, material.clone());
                         material
                     }
