@@ -55,7 +55,6 @@ pub struct Sprite3dParams<'w, 's> {
 pub struct MatKey {
     image: Handle<Image>,
     unlit: bool,
-    pub crazy: bool,
     emissive: [u8; 4],
 }
 
@@ -318,7 +317,6 @@ impl Sprite3d {
                     let mat_key = MatKey {
                         image: self.image.clone(),
                         unlit: self.unlit,
-                        crazy: self.crazy_colors,
                         emissive: reduce_colour(self.emissive),
                     };
 
@@ -416,7 +414,6 @@ impl Sprite3d {
                     let mat_key = MatKey {
                         image: self.image.clone(),
                         unlit: self.unlit,
-                        crazy: false,
                         emissive: reduce_colour(self.emissive),
                     };
                     if let Some(material) = params.sr.material_cache.get(&mat_key) { material.clone() }
