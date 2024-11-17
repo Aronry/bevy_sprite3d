@@ -61,13 +61,12 @@ pub struct MatKey {
 const DEFAULT_ALPHA_MODE: AlphaMode = AlphaMode::Mask(0.5);
 
 
-fn reduce_colour(c: Color) -> [u8; 4] { [
-        (c.r() * 255.) as u8,
-        (c.g() * 255.) as u8,
-        (c.b() * 255.) as u8,
-        (c.a() * 255.) as u8,
+fn reduce_colour(c: LinearRgba) -> [u8; 4] { [
+    (c.red * 255.) as u8,
+    (c.green * 255.) as u8,
+    (c.blue * 255.) as u8,
+    (c.alpha * 255.) as u8,
 ] }
-
 
 #[derive(Resource)]
 pub struct Sprite3dRes {
@@ -168,7 +167,7 @@ impl Material for CustomMaterial{
 #[derive(AsBindGroup, Debug, Clone, Asset, TypePath)]
 pub struct CustomMaterial {
     #[uniform(0)]
-    pub color: Color,
+    pub color: LinearRgba,
     #[texture(1)]
     #[sampler(2)]
     pub color_texture: Option<Handle<Image>>,
@@ -176,7 +175,7 @@ pub struct CustomMaterial {
 }
 
 // generate a StandardMaterial useful for rendering a sprite
-fn material(image: Handle<Image>, unlit: bool, emissive: Color) -> CustomMaterial {
+fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba) -> CustomMaterial {
     return CustomMaterial {
         color: emissive,
         color_texture: Some(image),
@@ -228,11 +227,11 @@ pub struct Sprite3d {
     pub double_sided: bool,
 
     /// An emissive colour, if the sprite should emit light.
-    /// `Color::Black` (default) does nothing.
-    pub emissive: Color,
+    /// `LinearRgba::Black` (default) does nothing.
+    pub emissive: LinearRgba,
 
         /// An emissive colour, if the sprite should emit light.
-    /// `Color::Black` (default) does nothing.
+    /// `LinearRgba::Black` (default) does nothing.
     pub crazy_colors: bool,
 }
 
@@ -246,7 +245,7 @@ impl Default for Sprite3d {
             alpha_mode: DEFAULT_ALPHA_MODE,
             unlit: false,
             double_sided: true,
-            emissive: Color::BLACK,
+            emissive: LinearRgba::BLACK,
             crazy_colors: false,
         }
     }
@@ -357,15 +356,15 @@ impl Sprite3d {
 
             let rect = atlas_layout.textures[i];
 
-            let w = rect.width() / self.pixels_per_metre;
-            let h = rect.height() / self.pixels_per_metre;
+            let w = rect.width() as f32 / self.pixels_per_metre;
+            let h = rect.height() as f32 / self.pixels_per_metre;
 
             let frac_rect = bevy::math::Rect {
-                min: Vec2::new(rect.min.x / (image_size.width as f32),
-                               rect.min.y / (image_size.height as f32)),
+                min: Vec2::new(rect.min.x as f32 / (image_size.width as f32),
+                               rect.min.y as f32 / (image_size.height as f32)),
 
-                max: Vec2::new(rect.max.x / (image_size.width as f32),
-                               rect.max.y / (image_size.height as f32)),
+                max: Vec2::new(rect.max.x as f32 / (image_size.width as f32),
+                               rect.max.y as f32 / (image_size.height as f32)),
             };
 
             let mut rect_pivot = pivot.clone();
