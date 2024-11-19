@@ -16,7 +16,7 @@
 fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     var out: VertexOutput;
     var vertex = vertex_no_morph;
-    var model = mesh_functions::get_model_matrix(vertex_no_morph.instance_index);
+    var model = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
 
 /*   
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
