@@ -178,8 +178,10 @@ pub struct StandardMaterial {
 fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba) -> StandardMaterial {
     return StandardMaterial {
         emissive: emissive,
+        base_color: emissive.into(),
         base_color_texture: Some(image),
         alpha_mode: AlphaMode::Mask(0.5),
+        unlit: true,
         ..Default::default()
     }
 }
