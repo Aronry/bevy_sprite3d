@@ -12,7 +12,7 @@ pub const CUSTOM_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(910291
 pub struct Sprite3dPlugin;
 impl Plugin for Sprite3dPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<CustomMaterial>::default());
+    //    app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
         app.init_resource::<Sprite3dRes>();
         app.add_systems(PostUpdate, sprite3d_system);
 
@@ -43,7 +43,7 @@ use bevy::ecs::system::SystemParam;
 #[derive(SystemParam)]
 pub struct Sprite3dParams<'w, 's> {
     pub meshes        : ResMut<'w, Assets<Mesh>>,
-    pub materials     : ResMut<'w, Assets<CustomMaterial>>,
+    pub materials     : ResMut<'w, Assets<StandardMaterial>>,
     pub images        : ResMut<'w, Assets<Image>>,
     pub atlas_layouts : ResMut<'w, Assets<TextureAtlasLayout>>,
     pub sr            : ResMut<'w, Sprite3dRes>,
@@ -71,7 +71,7 @@ fn reduce_colour(c: LinearRgba) -> [u8; 4] { [
 #[derive(Resource)]
 pub struct Sprite3dRes {
     pub mesh_cache: HashMap<[u32; 9], Handle<Mesh>>,
-    pub material_cache: HashMap<MatKey, Handle<CustomMaterial>>,
+    pub material_cache: HashMap<MatKey, Handle<StandardMaterial>>,
 }
 
 impl Default for Sprite3dRes {
@@ -148,8 +148,8 @@ fn quad(w: f32, h: f32, pivot: Option<Vec2>, double_sided: bool) -> Mesh {
     mesh
 }
 
-
-impl Material for CustomMaterial{
+/* 
+impl Material for StandardMaterial{
     fn fragment_shader() -> ShaderRef {
         ShaderRef::Handle(CUSTOM_FRAG_SHADER_HANDLE)
     }
@@ -161,11 +161,11 @@ impl Material for CustomMaterial{
     fn alpha_mode(&self) -> AlphaMode {
         self.alpha_mode
     }
-}
-
+} */
+/* 
 // This is the struct that will be passed to your shader
 #[derive(AsBindGroup, Debug, Clone, Asset, TypePath)]
-pub struct CustomMaterial {
+pub struct StandardMaterial {
     #[uniform(0)]
     pub color: LinearRgba,
     #[texture(1)]
@@ -173,13 +173,14 @@ pub struct CustomMaterial {
     pub color_texture: Option<Handle<Image>>,
     pub alpha_mode: AlphaMode,
 }
-
+ */
 // generate a StandardMaterial useful for rendering a sprite
-fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba) -> CustomMaterial {
-    return CustomMaterial {
-        color: emissive,
-        color_texture: Some(image),
+fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba) -> StandardMaterial {
+    return StandardMaterial {
+        emissive: emissive,
+        base_color_texture: Some(image),
         alpha_mode: AlphaMode::Blend,
+        ..Default::default()
     }
 }
 
@@ -265,14 +266,14 @@ pub struct TextureAtlas3dData {
 #[derive(Bundle)]
 pub struct Sprite3dBundle {
     pub params: Sprite3dComponent,
-    pub pbr: MaterialMeshBundle<CustomMaterial>,
+    pub pbr: PbrBundle,
 }
 
 #[derive(Bundle)]
 pub struct AtlasSprite3dBundle {
     pub params: Sprite3dComponent,
     pub data: TextureAtlas3dData,
-    pub pbr: MaterialMeshBundle<CustomMaterial>,
+    pub pbr: PbrBundle,
     pub atlas: TextureAtlas,
 }
 
@@ -287,7 +288,7 @@ impl Sprite3d {
 
         return Sprite3dBundle {
             params: Sprite3dComponent {},
-            pbr: MaterialMeshBundle {
+            pbr: PbrBundle {
                 mesh: {
                     let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
 
@@ -407,7 +408,7 @@ impl Sprite3d {
         }
 
         return AtlasSprite3dBundle {
-            pbr: MaterialMeshBundle {
+            pbr: PbrBundle {
                 mesh: params.sr.mesh_cache.get(&mesh_keys[atlas.index]).unwrap().clone(),
                 material: {
                     let mat_key = MatKey {
