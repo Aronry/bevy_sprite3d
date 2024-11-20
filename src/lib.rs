@@ -179,7 +179,7 @@ fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba) -> Standard
     return StandardMaterial {
         emissive: emissive,
         base_color_texture: Some(image),
-        alpha_mode: AlphaMode::Opaque,
+        alpha_mode: AlphaMode::Mask(0.5),
         ..Default::default()
     }
 }
