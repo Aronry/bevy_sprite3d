@@ -181,7 +181,7 @@ fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba) -> Standard
         base_color: emissive.into(),
         base_color_texture: Some(image),
     //    perceptual_roughness: 0.,
-        alpha_mode: AlphaMode::Mask(0.1),
+        alpha_mode: AlphaMode::Mask(0.9),
         unlit: true,
         ..Default::default()
     }
