@@ -175,13 +175,13 @@ pub struct StandardMaterial {
 }
  */
 // generate a StandardMaterial useful for rendering a sprite
-fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba) -> StandardMaterial {
+fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba, alpha_mode: AlphaMode) -> StandardMaterial {
     return StandardMaterial {
         emissive: emissive,
         base_color: emissive.into(),
         base_color_texture: Some(image),
     //    perceptual_roughness: 0.,
-        alpha_mode: AlphaMode::Mask(0.9),
+        alpha_mode: alpha_mode,
         unlit: true,
         ..Default::default()
     }
@@ -325,7 +325,7 @@ impl Sprite3d {
 
                     if let Some(material) = params.sr.material_cache.get(&mat_key) { material.clone() }
                     else {
-                        let material = params.materials.add(material(self.image.clone(),  self.unlit, self.emissive));
+                        let material = params.materials.add(material(self.image.clone(),  self.unlit, self.emissive, self.alpha_mode));
                         params.sr.material_cache.insert(mat_key, material.clone());
                         material
                     }
@@ -421,7 +421,7 @@ impl Sprite3d {
                     };
                     if let Some(material) = params.sr.material_cache.get(&mat_key) { material.clone() }
                     else {
-                        let material = params.materials.add(material(self.image.clone(), self.unlit, self.emissive));
+                        let material = params.materials.add(material(self.image.clone(), self.unlit, self.emissive, self.alpha_mode));
                         params.sr.material_cache.insert(mat_key, material.clone());
                         material
                     }
