@@ -280,6 +280,22 @@ pub struct AtlasSprite3dBundle {
     pub atlas: TextureAtlas,
 }
 
+#[derive(Bundle)]
+pub struct RawAtlasSprite3dBundle {
+    pub params: Sprite3dComponent,
+    pub data: TextureAtlas3dData,
+    pub atlas: TextureAtlas,
+    pub mesh: Handle<Mesh>,
+    pub transform: Transform,
+    pub global_transform: GlobalTransform,
+    /// User indication of whether an entity is visible
+    pub visibility: Visibility,
+    /// Inherited visibility of an entity.
+    pub inherited_visibility: InheritedVisibility,
+    /// Algorithmically-computed indication of whether an entity is visible and should be extracted for rendering
+    pub view_visibility: ViewVisibility,
+}
+
 impl Sprite3d {
     /// creates a bundle of components from the Sprite3d struct.
     pub fn bundle(self, params: &mut Sprite3dParams ) -> Sprite3dBundle {
@@ -437,4 +453,92 @@ impl Sprite3d {
             atlas,
         }
     }
+
+        /// creates a bundle of components from the AtlasSprite3d struct.
+    pub fn bundle_with_atlas_raw(
+        self,
+        params: &mut Sprite3dParams,
+        atlas: TextureAtlas,
+    ) -> RawAtlasSprite3dBundle {
+        let atlas_layout = params.atlas_layouts.get(&atlas.layout).unwrap();
+        let image = params.images.get(&self.image).unwrap();
+        let image_size = image.texture_descriptor.size;
+
+        let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
+        // cache all the meshes for the atlas (if they haven't been already)
+        // so that we can change the index later and not have to re-create the mesh.
+
+        // store all lookup keys in a vec so we later know which meshes to retrieve.
+        let mut mesh_keys = Vec::new();
+
+
+        for i in 0..atlas_layout.textures.len() {
+
+            let rect = atlas_layout.textures[i];
+
+            let w = rect.width() as f32 / self.pixels_per_metre;
+            let h = rect.height() as f32 / self.pixels_per_metre;
+
+            let frac_rect = bevy::math::Rect {
+                min: Vec2::new(rect.min.x as f32 / (image_size.width as f32),
+                               rect.min.y as f32 / (image_size.height as f32)),
+
+                max: Vec2::new(rect.max.x as f32 / (image_size.width as f32),
+                               rect.max.y as f32 / (image_size.height as f32)),
+            };
+
+            let mut rect_pivot = pivot.clone();
+
+            // scale pivot to be relative to the rect within the atlas.
+            rect_pivot.x *= frac_rect.width();
+            rect_pivot.y *= frac_rect.height();
+            rect_pivot += frac_rect.min;
+
+
+            let mesh_key = [(w * MESH_CACHE_GRANULARITY) as u32,
+                            (h * MESH_CACHE_GRANULARITY) as u32,
+                            (rect_pivot.x * MESH_CACHE_GRANULARITY) as u32,
+                            (rect_pivot.y * MESH_CACHE_GRANULARITY) as u32,
+                            self.double_sided as u32,
+                            (frac_rect.min.x * MESH_CACHE_GRANULARITY) as u32,
+                            (frac_rect.min.y * MESH_CACHE_GRANULARITY) as u32,
+                            (frac_rect.max.x * MESH_CACHE_GRANULARITY) as u32,
+                            (frac_rect.max.y * MESH_CACHE_GRANULARITY) as u32];
+
+            mesh_keys.push(mesh_key);
+
+            // if we don't have a mesh in the cache, create it.
+            if !params.sr.mesh_cache.contains_key(&mesh_key) {
+                let mut mesh = quad( w, h, Some(pivot), self.double_sided );
+                mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![
+                    [frac_rect.min.x, frac_rect.max.y],
+                    [frac_rect.max.x, frac_rect.max.y],
+                    [frac_rect.min.x, frac_rect.min.y],
+                    [frac_rect.max.x, frac_rect.min.y],
+
+                    [frac_rect.min.x, frac_rect.max.y],
+                    [frac_rect.max.x, frac_rect.max.y],
+                    [frac_rect.min.x, frac_rect.min.y],
+                    [frac_rect.max.x, frac_rect.min.y],
+                ]);
+                let mesh_h = params.meshes.add(mesh);
+                params.sr.mesh_cache.insert(mesh_key, mesh_h);
+            }
+        }
+
+        return RawAtlasSprite3dBundle {
+            mesh: params.sr.mesh_cache.get(&mesh_keys[atlas.index]).unwrap().clone(),
+            transform: self.transform,
+            params: Sprite3dComponent {},
+            data: TextureAtlas3dData {
+                keys: mesh_keys,
+            },
+            atlas,
+            global_transform: Default::default(),
+            visibility: Default::default(),
+            inherited_visibility: Default::default(),
+            view_visibility: Default::default(),
+        }
+    }
+
 }
