@@ -35,11 +35,17 @@ fn fragment(
 ) -> FragmentOutput {
     // generate a PbrInput struct from the StandardMaterial bindings
 
-var out: FragmentOutput;
+    var out: FragmentOutput;
     // we can optionally modify the input before lighting and alpha_discard is applied
     // pbr_input.material.base_color.b = pbr_input.material.base_color.r;
 
+    let tex = textureSample(base_color_texture, base_color_sampler, in.uv);
+
     // alpha discard
+    //pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+    if tex.a < 0.1 {
+        discard;
+    }
 
     //Old shit
     // we can optionally modify the lit color before post-processing is applied
@@ -51,6 +57,6 @@ var out: FragmentOutput;
 
     // we can optionally modify the final result here
     // out.color = out.color + vec4<f32>(my_extended_material.add_color.xyz, 0.);
-    out.color = textureSample(base_color_texture, base_color_sampler, in.uv) * material.color;
+    out.color = tex * material.color;
     return out;
 }
