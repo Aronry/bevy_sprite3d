@@ -1,8 +1,8 @@
 use bevy::prelude::*;
-use bevy::render::{ mesh::*, render_resource::*, render_asset::RenderAssetUsages};
+use bevy::render::{ mesh::*, render_asset::RenderAssetUsages};
 use std::hash::Hash;
 use std::collections::HashMap;
-use bevy::asset::{load_internal_asset, load_internal_binary_asset};
+use bevy::asset::load_internal_asset;
 
 
 pub const CUSTOM_FRAG_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(910591614790536);
@@ -35,6 +35,10 @@ impl Plugin for Sprite3dPlugin {
 
 // sizes are multiplied by this, then cast to ints to query the mesh hashmap.
 const MESH_CACHE_GRANULARITY: f32 = 1000.;
+const MESH_KEY_SHAPE_QUAD: u32 = 0;
+const MESH_KEY_SHAPE_CUBE: u32 = 1;
+
+type MeshCacheKey = Vec<u32>;
 
 use std::marker::PhantomData;
 use bevy::ecs::system::SystemParam;
@@ -70,7 +74,7 @@ fn reduce_colour(c: LinearRgba) -> [u8; 4] { [
 
 #[derive(Resource)]
 pub struct Sprite3dRes {
-    pub mesh_cache: HashMap<[u32; 9], Handle<Mesh>>,
+    pub mesh_cache: HashMap<MeshCacheKey, Handle<Mesh>>,
     pub material_cache: HashMap<MatKey, Handle<StandardMaterial>>,
 }
 
@@ -148,6 +152,77 @@ fn quad(w: f32, h: f32, pivot: Option<Vec2>, double_sided: bool) -> Mesh {
     mesh
 }
 
+fn cube(
+    w: f32,
+    h: f32,
+    d: f32,
+    pivot: Option<Vec2>,
+    double_sided: bool,
+    uv_min: Vec2,
+    uv_max: Vec2,
+) -> Mesh {
+    let (x0, x1, y0, y1) = match pivot {
+        None => (-w / 2.0, w / 2.0, -h / 2.0, h / 2.0),
+        Some(pivot) => {
+            let px = pivot.x * w;
+            let py = pivot.y * h;
+            (-px, w - px, -py, h - py)
+        }
+    };
+
+    let z0 = -d / 2.0;
+    let z1 = d / 2.0;
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+
+    let positions = vec![
+        [x0, y0, z1], [x1, y0, z1], [x0, y1, z1], [x1, y1, z1], // front
+        [x1, y0, z0], [x0, y0, z0], [x1, y1, z0], [x0, y1, z0], // back
+        [x1, y0, z1], [x1, y0, z0], [x1, y1, z1], [x1, y1, z0], // right
+        [x0, y0, z0], [x0, y0, z1], [x0, y1, z0], [x0, y1, z1], // left
+        [x0, y1, z1], [x1, y1, z1], [x0, y1, z0], [x1, y1, z0], // top
+        [x0, y0, z0], [x1, y0, z0], [x0, y0, z1], [x1, y0, z1], // bottom
+    ];
+
+    let mut normals = Vec::with_capacity(24);
+    normals.extend([[0.0, 0.0, 1.0]; 4]);
+    normals.extend([[0.0, 0.0, -1.0]; 4]);
+    normals.extend([[1.0, 0.0, 0.0]; 4]);
+    normals.extend([[-1.0, 0.0, 0.0]; 4]);
+    normals.extend([[0.0, 1.0, 0.0]; 4]);
+    normals.extend([[0.0, -1.0, 0.0]; 4]);
+
+    let uvs_for_face = [
+        [uv_min.x, uv_max.y],
+        [uv_max.x, uv_max.y],
+        [uv_min.x, uv_min.y],
+        [uv_max.x, uv_min.y],
+    ];
+    let mut uvs = Vec::with_capacity(24);
+    for _ in 0..6 {
+        uvs.extend_from_slice(&uvs_for_face);
+    }
+
+    let mut indices = Vec::with_capacity(if double_sided { 72 } else { 36 });
+    for face in 0..6 {
+        let base = (face * 4) as u32;
+        indices.extend_from_slice(&[base, base + 1, base + 2, base + 1, base + 3, base + 2]);
+        if double_sided {
+            indices.extend_from_slice(&[base + 2, base + 1, base, base + 2, base + 3, base + 1]);
+        }
+    }
+
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+
+    mesh
+}
+
 /* 
 impl Material for StandardMaterial{
     fn fragment_shader() -> ShaderRef {
@@ -182,7 +257,7 @@ fn material(image: Handle<Image>, unlit: bool, emissive: LinearRgba, alpha_mode:
         base_color_texture: Some(image),
     //    perceptual_roughness: 0.,
         alpha_mode: alpha_mode,
-        unlit: true,
+        unlit: unlit,
         ..Default::default()
     }
 }
@@ -256,6 +331,57 @@ impl Default for Sprite3d {
 }
 
 
+/// A cube variant of a sprite that renders the same texture on all six faces.
+pub struct SpriteCube3d {
+    /// the sprite's transform
+    pub transform: Transform,
+
+    /// the sprite image used for all faces.
+    pub image: Handle<Image>,
+
+    /// the number of pixels per metre of the sprite, assuming a `Transform::scale` of 1.0.
+    pub pixels_per_metre: f32,
+
+    /// Optional override for the cube's depth expressed in pixels. When `None`, the sprite's width is used.
+    pub depth_pixels: Option<f32>,
+
+    /// The sprite's pivot. eg. the point specified by the sprite's transform, around which a rotation will be performed.
+    /// Uses the same semantics as [`Sprite3d::pivot`].
+    pub pivot: Option<Vec2>,
+
+    /// The sprite's alpha mode.
+    pub alpha_mode: AlphaMode,
+
+    /// Whether the sprite should be rendered as unlit.
+    pub unlit: bool,
+
+    /// Whether the sprite should render faces on the inside of the cube as well.
+    pub double_sided: bool,
+
+    /// An emissive colour, if the sprite should emit light.
+    pub emissive: LinearRgba,
+
+    /// Matches the Sprite3d API for compatibility.
+    pub crazy_colors: bool,
+}
+
+impl Default for SpriteCube3d {
+    fn default() -> Self {
+        Self {
+            transform: Default::default(),
+            image: Default::default(),
+            pixels_per_metre: 100.,
+            depth_pixels: None,
+            pivot: None,
+            alpha_mode: DEFAULT_ALPHA_MODE,
+            unlit: false,
+            double_sided: true,
+            emissive: LinearRgba::BLACK,
+            crazy_colors: false,
+        }
+    }
+}
+
 // just a marker for queries at the moment, could be expanded later if needed.
 #[derive(Component)]
 pub struct Sprite3dComponent {}
@@ -263,7 +389,7 @@ pub struct Sprite3dComponent {}
 // Stores mesh keys since the previous AtlasSprite3dComponent was removed.
 #[derive(Component)]
 pub struct TextureAtlas3dData {
-    pub keys: Vec<[u32; 9]>,
+    pub keys: Vec<MeshCacheKey>,
 }
 
 #[derive(Bundle)]
@@ -296,6 +422,10 @@ pub struct RawAtlasSprite3dBundle {
     pub view_visibility: ViewVisibility,
 }
 
+pub type SpriteCube3dBundle = Sprite3dBundle;
+pub type AtlasSpriteCube3dBundle = AtlasSprite3dBundle;
+pub type RawAtlasSpriteCube3dBundle = RawAtlasSprite3dBundle;
+
 impl Sprite3d {
     /// creates a bundle of components from the Sprite3d struct.
     pub fn bundle(self, params: &mut Sprite3dParams ) -> Sprite3dBundle {
@@ -311,20 +441,20 @@ impl Sprite3d {
                 mesh: {
                     let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
 
-                    let mesh_key = [(w * MESH_CACHE_GRANULARITY) as u32,
-                                    (h * MESH_CACHE_GRANULARITY) as u32,
-                                    (pivot.x * MESH_CACHE_GRANULARITY) as u32,
-                                    (pivot.y * MESH_CACHE_GRANULARITY) as u32,
-                                    self.double_sided as u32,
-                                    0, 0, 0, 0
-                                    ];
+                    let mesh_key = vec![MESH_KEY_SHAPE_QUAD,
+                                        (w * MESH_CACHE_GRANULARITY) as u32,
+                                        (h * MESH_CACHE_GRANULARITY) as u32,
+                                        (pivot.x * MESH_CACHE_GRANULARITY) as u32,
+                                        (pivot.y * MESH_CACHE_GRANULARITY) as u32,
+                                        self.double_sided as u32,
+                                        0, 0, 0, 0, 0];
 
                     // if we have a mesh in the cache, use it.
                     // (greatly reduces number of unique meshes for tilemaps, etc.)
                     if let Some(mesh) = params.sr.mesh_cache.get(&mesh_key) { mesh.clone() }
                     else { // otherwise, create a new mesh and cache it.
                         let mesh = params.meshes.add(quad( w, h, self.pivot, self.double_sided ));
-                        params.sr.mesh_cache.insert(mesh_key, mesh.clone());
+                        params.sr.mesh_cache.insert(mesh_key.clone(), mesh.clone());
                         mesh
                     }
                 },
@@ -395,17 +525,19 @@ impl Sprite3d {
             rect_pivot += frac_rect.min;
 
 
-            let mesh_key = [(w * MESH_CACHE_GRANULARITY) as u32,
-                            (h * MESH_CACHE_GRANULARITY) as u32,
-                            (rect_pivot.x * MESH_CACHE_GRANULARITY) as u32,
-                            (rect_pivot.y * MESH_CACHE_GRANULARITY) as u32,
-                            self.double_sided as u32,
-                            (frac_rect.min.x * MESH_CACHE_GRANULARITY) as u32,
-                            (frac_rect.min.y * MESH_CACHE_GRANULARITY) as u32,
-                            (frac_rect.max.x * MESH_CACHE_GRANULARITY) as u32,
-                            (frac_rect.max.y * MESH_CACHE_GRANULARITY) as u32];
+            let mesh_key = vec![MESH_KEY_SHAPE_QUAD,
+                                (w * MESH_CACHE_GRANULARITY) as u32,
+                                (h * MESH_CACHE_GRANULARITY) as u32,
+                                (rect_pivot.x * MESH_CACHE_GRANULARITY) as u32,
+                                (rect_pivot.y * MESH_CACHE_GRANULARITY) as u32,
+                                self.double_sided as u32,
+                                0,
+                                (frac_rect.min.x * MESH_CACHE_GRANULARITY) as u32,
+                                (frac_rect.min.y * MESH_CACHE_GRANULARITY) as u32,
+                                (frac_rect.max.x * MESH_CACHE_GRANULARITY) as u32,
+                                (frac_rect.max.y * MESH_CACHE_GRANULARITY) as u32];
 
-            mesh_keys.push(mesh_key);
+            mesh_keys.push(mesh_key.clone());
 
             // if we don't have a mesh in the cache, create it.
             if !params.sr.mesh_cache.contains_key(&mesh_key) {
@@ -495,17 +627,19 @@ impl Sprite3d {
             rect_pivot += frac_rect.min;
 
 
-            let mesh_key = [(w * MESH_CACHE_GRANULARITY) as u32,
-                            (h * MESH_CACHE_GRANULARITY) as u32,
-                            (rect_pivot.x * MESH_CACHE_GRANULARITY) as u32,
-                            (rect_pivot.y * MESH_CACHE_GRANULARITY) as u32,
-                            self.double_sided as u32,
-                            (frac_rect.min.x * MESH_CACHE_GRANULARITY) as u32,
-                            (frac_rect.min.y * MESH_CACHE_GRANULARITY) as u32,
-                            (frac_rect.max.x * MESH_CACHE_GRANULARITY) as u32,
-                            (frac_rect.max.y * MESH_CACHE_GRANULARITY) as u32];
+            let mesh_key = vec![MESH_KEY_SHAPE_QUAD,
+                                (w * MESH_CACHE_GRANULARITY) as u32,
+                                (h * MESH_CACHE_GRANULARITY) as u32,
+                                (rect_pivot.x * MESH_CACHE_GRANULARITY) as u32,
+                                (rect_pivot.y * MESH_CACHE_GRANULARITY) as u32,
+                                self.double_sided as u32,
+                                0,
+                                (frac_rect.min.x * MESH_CACHE_GRANULARITY) as u32,
+                                (frac_rect.min.y * MESH_CACHE_GRANULARITY) as u32,
+                                (frac_rect.max.x * MESH_CACHE_GRANULARITY) as u32,
+                                (frac_rect.max.y * MESH_CACHE_GRANULARITY) as u32];
 
-            mesh_keys.push(mesh_key);
+            mesh_keys.push(mesh_key.clone());
 
             // if we don't have a mesh in the cache, create it.
             if !params.sr.mesh_cache.contains_key(&mesh_key) {
@@ -541,4 +675,259 @@ impl Sprite3d {
         }
     }
 
+}
+
+impl SpriteCube3d {
+    /// creates a bundle of components from the SpriteCube3d struct.
+    pub fn bundle(self, params: &mut Sprite3dParams) -> SpriteCube3dBundle {
+        let image_size = params.images.get(&self.image).unwrap().texture_descriptor.size;
+        let w = (image_size.width as f32) / self.pixels_per_metre;
+        let h = (image_size.height as f32) / self.pixels_per_metre;
+        let depth_pixels = self.depth_pixels.unwrap_or(image_size.width as f32);
+        let depth = depth_pixels / self.pixels_per_metre;
+        let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
+
+        Sprite3dBundle {
+            params: Sprite3dComponent {},
+            pbr: PbrBundle {
+                mesh: {
+                    let mesh_key = vec![
+                        MESH_KEY_SHAPE_CUBE,
+                        (w * MESH_CACHE_GRANULARITY) as u32,
+                        (h * MESH_CACHE_GRANULARITY) as u32,
+                        (pivot.x * MESH_CACHE_GRANULARITY) as u32,
+                        (pivot.y * MESH_CACHE_GRANULARITY) as u32,
+                        self.double_sided as u32,
+                        (depth * MESH_CACHE_GRANULARITY) as u32,
+                        0,
+                        0,
+                        0,
+                        0,
+                    ];
+
+                    if let Some(mesh) = params.sr.mesh_cache.get(&mesh_key) {
+                        mesh.clone()
+                    } else {
+                        let mesh = params
+                            .meshes
+                            .add(cube(w, h, depth, self.pivot, self.double_sided, Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0)));
+                        params.sr.mesh_cache.insert(mesh_key.clone(), mesh.clone());
+                        mesh
+                    }
+                },
+                material: {
+                    let mat_key = MatKey {
+                        image: self.image.clone(),
+                        unlit: self.unlit,
+                        emissive: reduce_colour(self.emissive),
+                    };
+
+                    if let Some(material) = params.sr.material_cache.get(&mat_key) {
+                        material.clone()
+                    } else {
+                        let material = params.materials.add(material(
+                            self.image.clone(),
+                            self.unlit,
+                            self.emissive,
+                            self.alpha_mode,
+                        ));
+                        params.sr.material_cache.insert(mat_key, material.clone());
+                        material
+                    }
+                },
+                transform: self.transform,
+                ..default()
+            },
+        }
+    }
+
+    /// creates a bundle of components from the SpriteCube3d struct using a texture atlas.
+    pub fn bundle_with_atlas(
+        self,
+        params: &mut Sprite3dParams,
+        atlas: TextureAtlas,
+    ) -> AtlasSpriteCube3dBundle {
+        let atlas_layout = params.atlas_layouts.get(&atlas.layout).unwrap();
+        let image = params.images.get(&self.image).unwrap();
+        let image_size = image.texture_descriptor.size;
+
+        let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
+        let mut mesh_keys = Vec::new();
+
+        for i in 0..atlas_layout.textures.len() {
+            let rect = atlas_layout.textures[i];
+
+            let w = rect.width() as f32 / self.pixels_per_metre;
+            let h = rect.height() as f32 / self.pixels_per_metre;
+            let depth_pixels = self.depth_pixels.unwrap_or(rect.width() as f32);
+            let depth = depth_pixels / self.pixels_per_metre;
+
+            let frac_rect = bevy::math::Rect {
+                min: Vec2::new(
+                    rect.min.x as f32 / (image_size.width as f32),
+                    rect.min.y as f32 / (image_size.height as f32),
+                ),
+                max: Vec2::new(
+                    rect.max.x as f32 / (image_size.width as f32),
+                    rect.max.y as f32 / (image_size.height as f32),
+                ),
+            };
+
+            let mut rect_pivot = pivot.clone();
+            rect_pivot.x *= frac_rect.width();
+            rect_pivot.y *= frac_rect.height();
+            rect_pivot += frac_rect.min;
+
+            let mesh_key = vec![
+                MESH_KEY_SHAPE_CUBE,
+                (w * MESH_CACHE_GRANULARITY) as u32,
+                (h * MESH_CACHE_GRANULARITY) as u32,
+                (rect_pivot.x * MESH_CACHE_GRANULARITY) as u32,
+                (rect_pivot.y * MESH_CACHE_GRANULARITY) as u32,
+                self.double_sided as u32,
+                (depth * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.min.x * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.min.y * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.max.x * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.max.y * MESH_CACHE_GRANULARITY) as u32,
+            ];
+
+            mesh_keys.push(mesh_key.clone());
+
+            if !params.sr.mesh_cache.contains_key(&mesh_key) {
+                let mesh = cube(
+                    w,
+                    h,
+                    depth,
+                    self.pivot,
+                    self.double_sided,
+                    Vec2::new(frac_rect.min.x, frac_rect.min.y),
+                    Vec2::new(frac_rect.max.x, frac_rect.max.y),
+                );
+                let mesh_h = params.meshes.add(mesh);
+                params.sr.mesh_cache.insert(mesh_key, mesh_h);
+            }
+        }
+
+        AtlasSprite3dBundle {
+            pbr: PbrBundle {
+                mesh: params
+                    .sr
+                    .mesh_cache
+                    .get(&mesh_keys[atlas.index])
+                    .unwrap()
+                    .clone(),
+                material: {
+                    let mat_key = MatKey {
+                        image: self.image.clone(),
+                        unlit: self.unlit,
+                        emissive: reduce_colour(self.emissive),
+                    };
+                    if let Some(material) = params.sr.material_cache.get(&mat_key) {
+                        material.clone()
+                    } else {
+                        let material = params.materials.add(material(
+                            self.image.clone(),
+                            self.unlit,
+                            self.emissive,
+                            self.alpha_mode,
+                        ));
+                        params.sr.material_cache.insert(mat_key, material.clone());
+                        material
+                    }
+                },
+                transform: self.transform,
+                ..default()
+            },
+            params: Sprite3dComponent {},
+            data: TextureAtlas3dData { keys: mesh_keys },
+            atlas,
+        }
+    }
+
+    /// creates a bundle of components from the SpriteCube3d struct using a texture atlas without PbrBundle defaults.
+    pub fn bundle_with_atlas_raw(
+        self,
+        params: &mut Sprite3dParams,
+        atlas: TextureAtlas,
+    ) -> RawAtlasSpriteCube3dBundle {
+        let atlas_layout = params.atlas_layouts.get(&atlas.layout).unwrap();
+        let image = params.images.get(&self.image).unwrap();
+        let image_size = image.texture_descriptor.size;
+
+        let pivot = self.pivot.unwrap_or(Vec2::new(0.5, 0.5));
+        let mut mesh_keys = Vec::new();
+
+        for i in 0..atlas_layout.textures.len() {
+            let rect = atlas_layout.textures[i];
+
+            let w = rect.width() as f32 / self.pixels_per_metre;
+            let h = rect.height() as f32 / self.pixels_per_metre;
+            let depth_pixels = self.depth_pixels.unwrap_or(rect.width() as f32);
+            let depth = depth_pixels / self.pixels_per_metre;
+
+            let frac_rect = bevy::math::Rect {
+                min: Vec2::new(
+                    rect.min.x as f32 / (image_size.width as f32),
+                    rect.min.y as f32 / (image_size.height as f32),
+                ),
+                max: Vec2::new(
+                    rect.max.x as f32 / (image_size.width as f32),
+                    rect.max.y as f32 / (image_size.height as f32),
+                ),
+            };
+
+            let mut rect_pivot = pivot.clone();
+            rect_pivot.x *= frac_rect.width();
+            rect_pivot.y *= frac_rect.height();
+            rect_pivot += frac_rect.min;
+
+            let mesh_key = vec![
+                MESH_KEY_SHAPE_CUBE,
+                (w * MESH_CACHE_GRANULARITY) as u32,
+                (h * MESH_CACHE_GRANULARITY) as u32,
+                (rect_pivot.x * MESH_CACHE_GRANULARITY) as u32,
+                (rect_pivot.y * MESH_CACHE_GRANULARITY) as u32,
+                self.double_sided as u32,
+                (depth * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.min.x * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.min.y * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.max.x * MESH_CACHE_GRANULARITY) as u32,
+                (frac_rect.max.y * MESH_CACHE_GRANULARITY) as u32,
+            ];
+
+            mesh_keys.push(mesh_key.clone());
+
+            if !params.sr.mesh_cache.contains_key(&mesh_key) {
+                let mesh = cube(
+                    w,
+                    h,
+                    depth,
+                    self.pivot,
+                    self.double_sided,
+                    Vec2::new(frac_rect.min.x, frac_rect.min.y),
+                    Vec2::new(frac_rect.max.x, frac_rect.max.y),
+                );
+                let mesh_h = params.meshes.add(mesh);
+                params.sr.mesh_cache.insert(mesh_key, mesh_h);
+            }
+        }
+
+        RawAtlasSprite3dBundle {
+            mesh: params
+                .sr
+                .mesh_cache
+                .get(&mesh_keys[atlas.index])
+                .unwrap()
+                .clone(),
+            transform: self.transform,
+            params: Sprite3dComponent {},
+            data: TextureAtlas3dData { keys: mesh_keys },
+            atlas,
+            global_transform: Default::default(),
+            visibility: Default::default(),
+            inherited_visibility: Default::default(),
+            view_visibility: Default::default(),
+        }
+    }
 }
